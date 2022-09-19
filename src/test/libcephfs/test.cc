@@ -2292,7 +2292,7 @@ TEST(LibCephFS, OperationsOnDotDot) {
   ASSERT_EQ(-CEPHFS_EBUSY, ceph_rename(cmount, c_dir_dot, c_temp));
   ASSERT_EQ(0, ceph_chdir(cmount, c_dir));
   ASSERT_EQ(0, ceph_mkdir(cmount, c_temp, 0777));
-  ASSERT_EQ(-EBUSY, ceph_rename(cmount, c_temp, ".."));
+  ASSERT_EQ(-CEPHFS_EBUSY, ceph_rename(cmount, c_temp, ".."));
 
   ceph_shutdown(cmount);
 }
@@ -2465,7 +2465,7 @@ TEST(LibCephFS, SnapQuota) {
 
   // ensure subdir noquota xattr under snap
   sprintf(c_temp, "/.snap/test_snap_dir_quota_xattr_snap_%d/test_snap_dir_quota_xattr_%d/subdir_noquota", mypid, mypid);
-  EXPECT_EQ(-ENODATA, ceph_getxattr(cmount, c_temp, "ceph.quota.max_bytes", (void *)gxattrv, xbuflen));
+  EXPECT_EQ(-CEPHFS_ENODATA, ceph_getxattr(cmount, c_temp, "ceph.quota.max_bytes", (void *)gxattrv, xbuflen));
 
   // listxattr() shouldn't return ceph.quota.max_bytes vxattr
   sprintf(c_temp, "/.snap/test_snap_dir_quota_xattr_snap_%d/test_snap_dir_quota_xattr_%d", mypid, mypid);
@@ -3580,7 +3580,7 @@ TEST(LibCephFS, SetMountTimeoutPostMount) {
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
   ASSERT_EQ(ceph_mount(cmount, NULL), 0);
 
-  ASSERT_EQ(-EINVAL, ceph_set_mount_timeout(cmount, 5));
+  ASSERT_EQ(-CEPHFS_EINVAL, ceph_set_mount_timeout(cmount, 5));
   ceph_shutdown(cmount);
 }
 

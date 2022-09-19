@@ -2408,7 +2408,7 @@ ref_t<MClientRequest> Client::build_client_request(MetaRequest *request)
   int max_retry = sizeof(((struct ceph_mds_request_head*)0)->num_retry);
   max_retry = 1 << (max_retry * CHAR_BIT);
   if (request->retry_attempt >= max_retry) {
-    request->abort(-EMULTIHOP);
+    request->abort(-CEPHFS_EMULTIHOP);
     request->caller_cond->notify_all();
     ldout(cct, 1) << __func__ << " request tid " << request->tid
                   << " seq overflow" << ", abort it" << dendl;
