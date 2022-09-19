@@ -684,7 +684,9 @@ add_custom_target(check
 
 add_subdirectory(src)
 
-add_subdirectory(qa)
+if(NOT WIN32)
+  add_subdirectory(qa)
+endif()
 add_subdirectory(doc)
 if(WITH_MANPAGE)
   add_subdirectory(man)
