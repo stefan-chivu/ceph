@@ -192,13 +192,12 @@ int execute_map(const po::variables_map &vm,
 void get_unmap_arguments(po::options_description *positional,
                          po::options_description *options) {
   add_device_type_option(options);
+  at::add_image_or_snap_spec_options(positional, options,
+                                     at::ARGUMENT_MODIFIER_NONE);
   positional->add_options()
     ("image-or-snap-or-device-spec",
      "image, snapshot, or device specification\n"
-     "[<pool-name>/]<image-name>[@<snap-name>] or <device-path>");
-  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
-  at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
-  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+     "[<pool-name>/][<namespace>/]<image-name>[@<snap-name>] or <device-path>");
   add_device_specific_options(options);
 }
 
