@@ -915,6 +915,7 @@ Usage: rbd-wnbd [options] map <image-or-snap-spec>           Map an image to wnb
 
 Map options:
   --device <device path>  Optional mapping unique identifier
+  --namespace             Namespace name
   --exclusive             Forbid writes by other clients
   --read-only             Map read-only
   --non-persistent        Do not recreate the mapping when the Ceph service
@@ -925,6 +926,7 @@ Map options:
                           Default: 4
 
 Unmap options:
+  --namespace                    Namespace name
   --hard-disconnect              Skip attempting a soft disconnect
   --no-hard-disconnect-fallback  Immediately return an error if the soft
                                  disconnect fails instead of attempting a hard
@@ -1226,7 +1228,14 @@ static int parse_imgpath(const std::string &imgpath, Config *cfg,
   }
 
   if (match[2].matched) {
-    cfg->nsname = match[2];
+    if (!cfg->nsname.empty()) {
+      if(cfg->nsname.compare(match[2]) != 0) {
+        derr << "rbd-wnbd: namespace specified using --namespace (" << cfg->nsname << ") is different from the namespace parsed from the image path (" << match[2] << ")" << dendl;
+        return -EINVAL;
+      }
+    } else {
+      cfg->nsname = match[2];
+    }
   }
 
   cfg->imgname = match[3];
@@ -1434,6 +1443,7 @@ static int parse_args(std::vector<const char*>& args,
                                      (char *)NULL)) {
     } else if (ceph_argparse_flag(args, i, "--read-only", (char *)NULL)) {
       cfg->readonly = true;
+    } else if (ceph_argparse_witharg(args, i, &cfg->nsname,"--namespace", (char *)NULL)){
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
       cfg->exclusive = true;
     } else if (ceph_argparse_flag(args, i, "--non-persistent", (char *)NULL)) {
