@@ -81,6 +81,9 @@ int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
   if (!pool_name.empty()) {
     spec->append(pool_name);
     spec->append("/");
+  } else {
+    spec->append(utils::get_default_pool_name());
+    spec->append("/");
   }
   if (!nspace_name.empty()) {
     spec->append(nspace_name);
