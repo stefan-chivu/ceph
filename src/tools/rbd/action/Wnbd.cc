@@ -183,6 +183,12 @@ int execute_unmap(const po::variables_map &vm,
     if (r < 0) {
       return r;
     }
+  } else {
+    device_name.clear();
+    int r = get_image_or_snap_spec(vm, &device_name);
+    if (r < 0){
+      return r;
+    }
   }
 
   if (device_name.empty() && image_name.empty()) {
