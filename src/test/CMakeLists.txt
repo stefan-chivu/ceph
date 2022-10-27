@@ -32,6 +32,7 @@ if (WITH_CEPHFS)
 endif()
 add_subdirectory(pybind)
 add_subdirectory(libcephfs)
+add_subdirectory(dokan)
 
 # Not available on Windows for the time being.
 if(NOT WIN32)
@@ -136,6 +137,11 @@ if(WITH_LIBCEPHFS)
   add_executable(test_build_libcephfs buildtest_skeleton.cc)
   target_link_libraries(test_build_libcephfs cephfs pthread ceph-common ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(WITH_LIBCEPHFS)
+
+if(WITH_DOKAN)
+  add_executable(test_build_dokan buildtest_skeleton.cc)
+  target_link_libraries(test_build_dokan ceph-common ${CRYPTO_LIBS} ${EXTRALIBS})
+endif(WITH_DOKAN)
 
 add_executable(test_build_librados buildtest_skeleton.cc)
 target_link_libraries(test_build_librados librados pthread ${CRYPTO_LIBS} ${EXTRALIBS} ceph-common ${BLKID_LIBRARIES})
