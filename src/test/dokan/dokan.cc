@@ -2,7 +2,6 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include <stdio.h>
 
 #include "gtest/gtest.h"
 
@@ -259,4 +258,54 @@ TEST_F(DokanTests, test_subfolders) {
     EXPECT_NE(std::filesystem::remove_all((base_dir_path).c_str()), 0)
         << "Failed to remove directory: " << base_dir_path;
     EXPECT_FALSE(std::filesystem::exists(sub_dir_file));
+}
+
+TEST_F(DokanTests, test_cleanup) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+// implemented in test_io
+TEST_F(DokanTests, test_flush) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+TEST_F(DokanTests, test_find_files) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+// might be included in test_io
+TEST_F(DokanTests, test_move_file) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+TEST_F(DokanTests, test_set_eof) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+TEST_F(DokanTests, test_allocation_size) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+TEST_F(DokanTests, test_file_info) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+TEST_F(DokanTests, test_set_file_attr) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+TEST_F(DokanTests, test_file_time) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+TEST_F(DokanTests, test_file_security) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+TEST_F(DokanTests, test_volume_info) {
+    std::cerr << "NO-OP" << std::endl;
+}
+
+TEST_F(DokanTests, test_get_free_space) {
+    std::cerr << "NO-OP" << std::endl;
 }
