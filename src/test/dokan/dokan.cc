@@ -77,21 +77,30 @@ int wait_for_mount(std::string mount_path) {
 
 void map_dokan(SubProcess** mount, const char* mountpoint) {
     SubProcess* new_mount = new SubProcess("ceph-dokan");
-    new_mount->add_cmd_args("map", "-l", mountpoint, NULL);
+
+    new_mount->add_cmd_args("map", "--win-vol-name", "TestCeph",
+                            "--win-vol-serial", "1234567890",
+                            "-l", mountpoint, NULL);
 
     *mount = new_mount;
     ASSERT_EQ(new_mount->spawn(), 0);
     ASSERT_EQ(wait_for_mount(mountpoint), 0);
 }
 
-void map_dokan_read_only(SubProcess** mount, const char* mountpoint) {
+void map_dokan_read_only(
+    SubProcess** mount,
+    const char* mountpoint
+) {
     SubProcess* new_mount = new SubProcess("ceph-dokan");
-    new_mount->add_cmd_args("map", "--read-only", "-l", mountpoint, NULL);
+    new_mount->add_cmd_args("map", "--win-vol-name", "TestCeph",
+                            "--win-vol-serial", "1234567890",
+                            "--read-only", "-l", mountpoint, NULL);
 
     *mount = new_mount;
     ASSERT_EQ(new_mount->spawn(), 0);
     ASSERT_EQ(wait_for_mount(mountpoint), 0);
-    std::cerr << mountpoint << " mounted in read-only mode"<< std::endl;
+    std::cerr << mountpoint << " mounted in read-only mode"
+              << std::endl;
 }
 
 void unmap_dokan(SubProcess* mount, const char* mountpoint) {
@@ -334,9 +343,45 @@ TEST_F(DokanTests, test_file_security) {
 }
 
 TEST_F(DokanTests, test_volume_info) {
-    std::cerr << "NO-OP" << std::endl;
+    // + 1 is for NULL
+    char volume_name[MAX_PATH + 1] = { 0 };
+    char file_system_name[MAX_PATH + 1] = { 0 };
+    DWORD serial_number = 0;
+    DWORD max_component_len = 0;
+    DWORD file_system_flags = 0;
+
+    ASSERT_EQ(
+        GetVolumeInformation(
+            DEFAULT_MOUNTPOINT,
+            volume_name,
+            sizeof(volume_name),
+            &serial_number,
+            &max_component_len,
+            &file_system_flags,
+            file_system_name,
+            sizeof(file_system_name)),TRUE) 
+        << "GetVolumeInformation() failed, error: "
+        << GetLastError() << std::endl;
+
+    ASSERT_STREQ(volume_name, "TestCeph") 
+        << "Received: " << volume_name << std::endl;
+    ASSERT_STREQ(file_system_name, "Ceph")
+        << "Received: " << file_system_name << std::endl;
+    ASSERT_EQ(max_component_len, 256);
+    ASSERT_EQ(serial_number, 1234567890)
+        << "Received: " << serial_number << std::endl;
+
+    // Consider adding specific flags 
+    // and check for them
+    // ASSERT_EQ(file_system_flags, 271);
 }
 
 TEST_F(DokanTests, test_get_free_space) {
-    std::cerr << "NO-OP" << std::endl;
+    std::error_code ec;
+    const std::filesystem::space_info si = std::filesystem::space(DEFAULT_MOUNTPOINT, ec);
+    
+    ASSERT_NE(static_cast<std::intmax_t>(si.capacity), 0);
+    ASSERT_NE(static_cast<std::intmax_t>(si.free), 0);
+    ASSERT_NE(static_cast<std::intmax_t>(si.available), 0);
+    ASSERT_EQ(ec.value(), 0);
 }
