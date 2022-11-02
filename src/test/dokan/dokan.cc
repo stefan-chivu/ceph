@@ -13,6 +13,8 @@
 #define MOUNT_POLL_ATTEMPT 10
 #define MOUNT_POLL_INTERVAL_MS 1000
 
+namespace fs = std::filesystem;
+
 std::string get_uuid() {
     uuid_d suffix;
     suffix.generate_random();
@@ -55,26 +57,16 @@ void check_write_file(std::string file_path, std::string data) {
 int wait_for_mount(std::string mount_path) {
     std::cerr << "Waiting for mount: " << mount_path << std::endl;
 
-    HANDLE hFile;
     int attempts = 0;
     do {
-        hFile= CreateFile(
-            mount_path.c_str(),
-            GENERIC_READ,          // open for reading
-            FILE_SHARE_READ,       // share for reading
-            NULL,                  // default security
-            OPEN_EXISTING,         // existing file only
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS, // normal file
-            NULL);
-
         attempts++;
-        if (attempts < MOUNT_POLL_ATTEMPT && hFile == INVALID_HANDLE_VALUE)
+        if (attempts < MOUNT_POLL_ATTEMPT)
             Sleep(MOUNT_POLL_INTERVAL_MS);
-    } while (hFile == INVALID_HANDLE_VALUE && attempts < MOUNT_POLL_ATTEMPT);
+    } while (!fs::exists(mount_path) && attempts < MOUNT_POLL_ATTEMPT);
 
-    if (hFile == INVALID_HANDLE_VALUE) {
-        std::cerr << "Timed out waiting for ceph-dokan mount: " << mount_path
-                  << ", err: " << GetLastError() << std::endl;
+    if (!fs::exists(mount_path)) {
+        std::cerr << "Timed out waiting for ceph-dokan mount: " 
+                  << mount_path << std::endl;
         return -ETIMEDOUT;
     }
 
@@ -146,7 +138,7 @@ TEST_F(DokanTests, test_mount_read_only) {
     map_dokan(&mount, mountpoint.c_str());
 
     check_write_file(mountpoint + success_file_path, data);
-    EXPECT_TRUE(std::filesystem::exists(mountpoint + success_file_path));
+    EXPECT_TRUE(fs::exists(mountpoint + success_file_path));
 
     unmap_dokan(mount, mountpoint.c_str());
 
@@ -154,25 +146,25 @@ TEST_F(DokanTests, test_mount_read_only) {
     map_dokan_read_only(&mount, mountpoint.c_str());
 
     write_file(mountpoint + failed_file_path, data, true);
-    EXPECT_FALSE(std::filesystem::exists(mountpoint + failed_file_path));
+    EXPECT_FALSE(fs::exists(mountpoint + failed_file_path));
 
-    EXPECT_TRUE(std::filesystem::exists(mountpoint + success_file_path));
+    EXPECT_TRUE(fs::exists(mountpoint + success_file_path));
     EXPECT_EQ(read_file(mountpoint + success_file_path), data);
     std::string exception_msg("filesystem error: cannot remove: No such device ["
                               + mountpoint + success_file_path + "]");
     EXPECT_THROW({
         try {
-            std::filesystem::remove(mountpoint + success_file_path);
-        } catch(const std::filesystem::filesystem_error &e) {
+            fs::remove(mountpoint + success_file_path);
+        } catch(const fs::filesystem_error &e) {
             EXPECT_STREQ(e.what(), exception_msg.c_str());
             throw;
         }
-    }, std::filesystem::filesystem_error);
+    }, fs::filesystem_error);
     unmap_dokan(mount, mountpoint.c_str());
 
     map_dokan(&mount, mountpoint.c_str());
-    EXPECT_TRUE(std::filesystem::exists(mountpoint + success_file_path));
-    EXPECT_TRUE(std::filesystem::remove(mountpoint + success_file_path));
+    EXPECT_TRUE(fs::exists(mountpoint + success_file_path));
+    EXPECT_TRUE(fs::remove(mountpoint + success_file_path));
     unmap_dokan(mount, mountpoint.c_str());
 }
 
@@ -195,7 +187,7 @@ TEST_F(DokanTests, test_create_file) {
     EXPECT_NE(CloseHandle(hFile), 0);
     
     // FILE_FLAG_DELETE_ON_CLOSE is used
-    EXPECT_FALSE(std::filesystem::exists(file_path));
+    EXPECT_FALSE(fs::exists(file_path));
 }
 
 TEST_F(DokanTests, test_io) {
@@ -207,17 +199,17 @@ TEST_F(DokanTests, test_io) {
     map_dokan(&mount, mountpoint.c_str());
 
     check_write_file(mountpoint + file_path, data);
-    EXPECT_TRUE(std::filesystem::exists(mountpoint + file_path));
+    EXPECT_TRUE(fs::exists(mountpoint + file_path));
     unmap_dokan(mount, mountpoint.c_str());
 
     mountpoint = "O:\\";
     mount = nullptr;
     map_dokan(&mount, mountpoint.c_str());
 
-    EXPECT_TRUE(std::filesystem::exists(mountpoint + file_path));
+    EXPECT_TRUE(fs::exists(mountpoint + file_path));
     EXPECT_EQ(data, read_file(mountpoint + file_path));
-    EXPECT_TRUE(std::filesystem::remove((mountpoint + file_path).c_str()));
-    EXPECT_FALSE(std::filesystem::exists(mountpoint + file_path));
+    EXPECT_TRUE(fs::remove((mountpoint + file_path).c_str()));
+    EXPECT_FALSE(fs::exists(mountpoint + file_path));
     unmap_dokan(mount, mountpoint.c_str());
 }
 
@@ -234,48 +226,87 @@ TEST_F(DokanTests, test_subfolders) {
 
     std::string data = "abc";
 
-    ASSERT_EQ(std::filesystem::create_directory(base_dir_path), true);
-    EXPECT_TRUE(std::filesystem::exists(base_dir_path));
+    ASSERT_EQ(fs::create_directory(base_dir_path), true);
+    EXPECT_TRUE(fs::exists(base_dir_path));
 
-    ASSERT_EQ(std::filesystem::create_directory(sub_dir_path), true);
-    EXPECT_TRUE(std::filesystem::exists(sub_dir_path));
+    ASSERT_EQ(fs::create_directory(sub_dir_path), true);
+    EXPECT_TRUE(fs::exists(sub_dir_path));
 
     check_write_file(base_dir_file, data);
-    EXPECT_TRUE(std::filesystem::exists(base_dir_file));
+    EXPECT_TRUE(fs::exists(base_dir_file));
 
     check_write_file(sub_dir_file, data);
-    EXPECT_TRUE(std::filesystem::exists(sub_dir_file));
+    EXPECT_TRUE(fs::exists(sub_dir_file));
 
-    EXPECT_TRUE(std::filesystem::remove((sub_dir_file).c_str()))
+    EXPECT_TRUE(fs::remove((sub_dir_file).c_str()))
         << "Failed to remove file: " << sub_dir_file;
-    EXPECT_FALSE(std::filesystem::exists(sub_dir_file));
+    EXPECT_FALSE(fs::exists(sub_dir_file));
 
     // Remove empty dir
-    EXPECT_TRUE(std::filesystem::remove((sub_dir_path).c_str()))
+    EXPECT_TRUE(fs::remove((sub_dir_path).c_str()))
         << "Failed to remove directory: " << sub_dir_path;
-    EXPECT_FALSE(std::filesystem::exists(sub_dir_file));
+    EXPECT_FALSE(fs::exists(sub_dir_file));
 
-    EXPECT_NE(std::filesystem::remove_all((base_dir_path).c_str()), 0)
+    EXPECT_NE(fs::remove_all((base_dir_path).c_str()), 0)
         << "Failed to remove directory: " << base_dir_path;
-    EXPECT_FALSE(std::filesystem::exists(sub_dir_file));
+    EXPECT_FALSE(fs::exists(sub_dir_file));
 }
 
 TEST_F(DokanTests, test_cleanup) {
     std::cerr << "NO-OP" << std::endl;
 }
 
-// implemented in test_io
-TEST_F(DokanTests, test_flush) {
-    std::cerr << "NO-OP" << std::endl;
-}
-
 TEST_F(DokanTests, test_find_files) {
-    std::cerr << "NO-OP" << std::endl;
+    std::string basedir_path = "X:/find_" + get_uuid();
+    std::string subdir_path = basedir_path + "/dir_" + get_uuid();
+    std::string file1_path = basedir_path + "/file1_" + get_uuid();
+    std::string file2_path = subdir_path + "/file2_" + get_uuid();
+
+    EXPECT_TRUE(
+        fs::create_directories(subdir_path)
+    );
+
+    std::ofstream{file1_path};
+    std::ofstream{file2_path};
+
+    std::vector<std::string> paths;
+
+    for (const auto & entry : fs::recursive_directory_iterator(basedir_path)) {
+        paths.push_back(entry.path().generic_string());
+    }
+
+    ASSERT_NE(std::find(begin(paths), end(paths), subdir_path), end(paths));
+    ASSERT_NE(std::find(begin(paths), end(paths), file1_path), end(paths));
+    ASSERT_NE(std::find(begin(paths), end(paths), file2_path), end(paths));
+
+    // Clean-up
+    EXPECT_NE(fs::remove_all(basedir_path), 0);
 }
 
-// might be included in test_io
 TEST_F(DokanTests, test_move_file) {
-    std::cerr << "NO-OP" << std::endl;
+    std::string dir1_path = DEFAULT_MOUNTPOINT
+                            "test_mv_1_" + get_uuid() + "\\";
+    std::string dir2_path = DEFAULT_MOUNTPOINT
+                            "test_mv_2_" + get_uuid() + "\\";
+    std::string file_name = "mv_file_" + get_uuid();
+    std::string data = "abcd";
+
+    EXPECT_TRUE(fs::create_directory(dir1_path));
+    EXPECT_TRUE(fs::create_directory(dir2_path));
+
+    check_write_file(dir1_path + file_name, data);
+    fs::copy(dir1_path + file_name,
+             dir2_path + file_name);
+    EXPECT_TRUE(fs::remove(dir1_path + file_name));
+
+    EXPECT_TRUE(fs::exists(dir2_path + file_name));
+    EXPECT_FALSE(fs::exists(dir1_path + file_name));
+
+    EXPECT_EQ(data, read_file(dir2_path + file_name));
+
+    // Clean-up
+    EXPECT_NE(fs::remove_all(dir1_path),0);
+    EXPECT_NE(fs::remove_all(dir2_path),0);
 }
 
 TEST_F(DokanTests, test_set_eof) {
