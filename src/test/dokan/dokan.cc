@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <filesystem>
+#include <sys/socket.h>
 
 #include "gtest/gtest.h"
 
@@ -261,10 +262,6 @@ TEST_F(DokanTests, test_subfolders) {
     EXPECT_FALSE(fs::exists(sub_dir_file));
 }
 
-TEST_F(DokanTests, test_cleanup) {
-    std::cerr << "NO-OP" << std::endl;
-}
-
 TEST_F(DokanTests, test_find_files) {
     std::string basedir_path = "X:/find_" + get_uuid();
     std::string subdir_path = basedir_path + "/dir_" + get_uuid();
@@ -326,19 +323,46 @@ TEST_F(DokanTests, test_allocation_size) {
     std::cerr << "NO-OP" << std::endl;
 }
 
+// incomplete
 TEST_F(DokanTests, test_file_info) {
-    std::cerr << "NO-OP" << std::endl;
-}
+    // create files of different kinds
+    std::string test_dir = DEFAULT_MOUNTPOINT"test_info_"
+                            + get_uuid() + "\\";
+    std::string file_path = test_dir + "file_"
+                            + get_uuid();
+    std::string dir_path = test_dir + "dir_"
+                           + get_uuid() + "\\";
+    std::string socket_path = test_dir + "socket_"
+                           + get_uuid();
+    std::string symlink_path = dir_path + "symlink_"
+                               + get_uuid();
 
-TEST_F(DokanTests, test_set_file_attr) {
-    std::cerr << "NO-OP" << std::endl;
+    ASSERT_TRUE(fs::create_directory(test_dir));
+
+    std::ofstream{file_path}; // create regular file
+    ASSERT_TRUE(fs::create_directory(dir_path)); // create directory
+
+    // sockaddr_un addr;
+    // addr.sun_family = AF_UNIX;
+    // std::strcpy(addr.sun_path, socket_path.c_str());
+    // int fd = socket(PF_UNIX, SOCK_STREAM, 0);
+    // bind(fd, reinterpret_cast<sockaddr*>(&addr), sizeof addr);
+
+    // fs::create_symlink(file_path, symlink_path);
+
+    ASSERT_TRUE(fs::is_regular_file(fs::status(file_path)));
+    ASSERT_TRUE(fs::is_directory(fs::status(dir_path)));
+    // ASSERT_TRUE(fs::is_socket(fs::status(socket_path)));
+    // ASSERT_TRUE(fs::is_symlink(fs::status(symlink_path)));
+    // ASSERT_TRUE(fs::is_block_file(fs::status(DEFAULT_MOUNTPOINT)));
+
+    // cleanup
+    // close(fd);
+    fs::remove_all(test_dir);
+
 }
 
 TEST_F(DokanTests, test_file_time) {
-    std::cerr << "NO-OP" << std::endl;
-}
-
-TEST_F(DokanTests, test_file_security) {
     std::cerr << "NO-OP" << std::endl;
 }
 
