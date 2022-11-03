@@ -409,3 +409,113 @@ TEST_F(DokanTests, test_get_free_space) {
     ASSERT_NE(static_cast<std::intmax_t>(si.available), 0);
     ASSERT_EQ(ec.value(), 0);
 }
+
+bool has_attr(LPCSTR path, DWORD attr){
+    DWORD dwAttrs;
+
+    dwAttrs = GetFileAttributes(path); 
+
+    std::cout << "dwAttrs: " << dwAttrs << std::endl
+              << "attr: " << attr << std::endl
+              << "dwAttrs & attr = " << (dwAttrs & attr) << std::endl;
+    if (dwAttrs & attr) { 
+        return true;
+    }
+
+    return false;
+}
+
+void check_set_attr(LPCSTR path, DWORD attr){
+    DWORD dwAttrs;
+
+    dwAttrs = GetFileAttributes(path);
+
+    if (!(dwAttrs & attr)) { 
+        int status = SetFileAttributes(path, dwAttrs | attr);
+        if(!status) {
+            std::cerr << "Failed setting attribute " << attr
+                      << " for file: " << path << std::endl;
+        }
+    }
+
+    EXPECT_TRUE(has_attr(path, attr));
+}
+
+void check_unset_attr(LPCSTR path, DWORD attr){
+    DWORD dwAttrs;
+
+    dwAttrs = GetFileAttributes(path);
+
+    if (dwAttrs & attr) { 
+        int status = SetFileAttributes(path, dwAttrs & ~ attr);
+        if(!status) {
+            std::cerr << "Failed unsetting attribute " << attr
+                      << " for file: " << path << std::endl;
+        }
+    }
+
+    EXPECT_FALSE(has_attr(path, attr));
+}
+
+// Attributes ignored
+TEST_F(DokanTests, test_set_file_attr) {
+    std::string test_dir = DEFAULT_MOUNTPOINT"test_set_attr"
+                           + get_uuid() + "\\";
+    std::string file_path = test_dir + "file_" + get_uuid();
+    
+    ASSERT_TRUE(fs::create_directory(test_dir));
+
+    std::ofstream{file_path};
+    ASSERT_TRUE(fs::exists(file_path));
+
+    check_set_attr(file_path.c_str(), FILE_ATTRIBUTE_READONLY);
+    check_unset_attr(file_path.c_str(), FILE_ATTRIBUTE_READONLY);
+
+    // Clean-up
+    ASSERT_TRUE(fs::remove(file_path));
+}
+
+// ACL ignored
+TEST_F(DokanTests, test_file_security) {
+    std::string file_path = DEFAULT_MOUNTPOINT
+                            "test_security" + get_uuid();
+    
+    std::ofstream{file_path};
+
+    // No perms
+    fs::permissions(
+        file_path,
+        fs::perms::none,
+        fs::perm_options::replace
+    );
+
+    fs::perms file_perms = fs::status(file_path).permissions();
+    ASSERT_EQ(file_perms | fs::perms::all, fs::perms::none);
+
+    // Read-only perms
+    fs::permissions(
+        file_path,
+        fs::perms::owner_read
+        | fs::perms::group_read
+        | fs::perms::others_read,
+        fs::perm_options::replace
+    );
+
+    // All perms
+    file_perms = fs::status(file_path).permissions();
+    ASSERT_EQ(
+        file_perms | fs::perms::all,
+        fs::perms::owner_read
+        | fs::perms::group_read
+        | fs::perms::others_read
+    );
+
+    fs::permissions(
+        file_path,
+        fs::perms::all,
+        fs::perm_options::replace
+    );
+
+    file_perms = fs::status(file_path).permissions();
+    ASSERT_EQ(file_perms | fs::perms::all, fs::perms::all);
+}
