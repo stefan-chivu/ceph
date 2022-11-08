@@ -367,6 +367,14 @@ void WnbdHandler::LogMessage(
           << WnbdLogLevelToStr(LogLevel) << " " << Message << dendl;
 }
 
+int WnbdHandler::resize(uint64_t block_count)
+{
+  int err = 0;
+
+  err = WnbdSetDiskSize(wnbd_disk, block_count);
+
+  return err;
+}
 
 int WnbdHandler::start()
 {

@@ -95,7 +95,8 @@ enum Command {
   List,
   Show,
   Service,
-  Stats
+  Stats,
+  Resize
 };
 
 typedef struct {
