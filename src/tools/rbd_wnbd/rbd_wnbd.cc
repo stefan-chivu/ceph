@@ -930,12 +930,14 @@ public:
       int ret;
 
       if (new_size != size) {
-        dout(5) << "Resizing disk. Block size: " << info.obj_size
-                << ". Old block count: " << new_size
-                << ". New block count: "<< size << "." << dendl;
+        dout(5) << "Resizing disk. Block size: " << RBD_WNBD_BLKSIZE
+                << ". New block count: "
+                << new_size / RBD_WNBD_BLKSIZE
+                << ". Old block count: "
+                << size / RBD_WNBD_BLKSIZE  << "." << dendl;
         
         // TODO: add size checks
-        ret = handler->resize(new_size);
+        ret = handler->resize(new_size / RBD_WNBD_BLKSIZE);
 
         if (ret < 0)
           derr << "resize failed: " << cpp_strerror(errno) << dendl;
@@ -1093,7 +1095,7 @@ static int do_map(Config *cfg)
   librbd::image_info_t info;
   HANDLE parent_pipe_handle = INVALID_HANDLE_VALUE;
   uint64_t handle;
-  WNBDWatchCtx watch_ctx(io_ctx, handler, image, info.size);
+  WNBDWatchCtx* watch_ctx = nullptr; //(io_ctx, handler, image, info.size);
   int err = 0;
 
   if (g_conf()->daemonize && cfg->parent_pipe.empty()) {
@@ -1207,13 +1209,16 @@ static int do_map(Config *cfg)
     global_init_postfork_finish(g_ceph_context);
   }
 
+  watch_ctx = new WNBDWatchCtx(io_ctx, handler, image, info.size);
+  r = image.update_watch(watch_ctx, &handle);
+  if (r < 0)
+    goto close_ret;
+
   handler->wait();
 
-  r = image.update_watch(&watch_ctx, &handle);
-    if (r < 0)
-      goto close_ret;
-
   r = image.update_unwatch(handle);
+  if (r < 0)
+    goto close_ret;
 
   handler->shutdown();
 
@@ -1237,6 +1242,10 @@ close_ret:
   if (handler) {
     delete handler;
     handler = nullptr;
+  }
+
+  if (watch_ctx) {
+    delete watch_ctx;
   }
 
   return r;

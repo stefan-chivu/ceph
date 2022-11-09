@@ -370,8 +370,16 @@ void WnbdHandler::LogMessage(
 int WnbdHandler::resize(uint64_t block_count)
 {
   int err = 0;
+  dout(5) << "Resizing disk to: " << block_count << " blocks" << dendl;
 
   err = WnbdSetDiskSize(wnbd_disk, block_count);
+
+  if (err) {
+    derr << "WNBD: Setting disk size failed with error: "
+         << err << dendl;
+    return -EINVAL;
+  }
+  dout(5) << "Successfully resized disk to: " << block_count << " blocks" << dendl;
 
   return err;
 }
