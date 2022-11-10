@@ -902,6 +902,54 @@ exit:
     }
 };
 
+class WNBDWatchCtx : public librbd::UpdateWatchCtx
+{
+private:
+  PWNBD_DISK disk;
+  WnbdHandler* handler;
+  librados::IoCtx &io_ctx;
+  librbd::Image &image;
+  uint64_t size;
+public:
+  WNBDWatchCtx(librados::IoCtx &_io_ctx,
+              WnbdHandler* handler,
+              librbd::Image &_image,
+              uint64_t _size)
+    : io_ctx(_io_ctx)
+    , handler(handler)
+    , image(_image)
+    , size(_size)
+  { }
+
+  ~WNBDWatchCtx() override {}
+
+  void handle_notify() override
+  {
+    librbd::image_info_t info;
+    if (image.stat(info, sizeof(info)) == 0) {
+      uint64_t new_size = info.size;
+      int ret;
+
+      if (new_size != size) {
+        dout(5) << "Resizing disk. Block size: " << RBD_WNBD_BLKSIZE
+                << ". New block count: "
+                << new_size / RBD_WNBD_BLKSIZE
+                << ". Old block count: "
+                << size / RBD_WNBD_BLKSIZE  << "." << dendl;
+        
+        ret = handler->resize(new_size / RBD_WNBD_BLKSIZE);
+
+        if (ret < 0)
+          derr << "resize failed: " << cpp_strerror(errno) << dendl;
+	      
+        if (!ret)
+          size = new_size;
+      }
+    }
+  }
+};
+
+
 static void usage()
 {
   const char* usage_str =R"(
@@ -1046,6 +1094,8 @@ static int do_map(Config *cfg)
   librbd::Image image;
   librbd::image_info_t info;
   HANDLE parent_pipe_handle = INVALID_HANDLE_VALUE;
+  uint64_t handle;
+  WNBDWatchCtx* watch_ctx = nullptr;
   int err = 0;
 
   if (g_conf()->daemonize && cfg->parent_pipe.empty()) {
@@ -1159,7 +1209,17 @@ static int do_map(Config *cfg)
     global_init_postfork_finish(g_ceph_context);
   }
 
+  watch_ctx = new WNBDWatchCtx(io_ctx, handler, image, info.size);
+  r = image.update_watch(watch_ctx, &handle);
+  if (r < 0)
+    goto close_ret;
+
   handler->wait();
+
+  r = image.update_unwatch(handle);
+  if (r < 0)
+    goto close_ret;
+
   handler->shutdown();
 
   // The registry record shouldn't be removed for (already) running mappings.
@@ -1182,6 +1242,10 @@ close_ret:
   if (handler) {
     delete handler;
     handler = nullptr;
+  }
+
+  if (watch_ctx) {
+    delete watch_ctx;
   }
 
   return r;
