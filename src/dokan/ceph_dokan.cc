@@ -847,6 +847,119 @@ static NTSTATUS WinCephUnmount(
   return 0;
 }
 
+static NTSTATUS WinCephLockFile(
+  LPCWSTR FileName,
+  LONGLONG ByteOffset,
+  LONGLONG Length,
+  PDOKAN_FILE_INFO DokanFileInfo) {
+  if (!Length) {
+    return 0;
+  }
+  if (ByteOffset < 0) {
+    dout(2) << __func__ << " " << get_path(FileName)
+            << ": Invalid offset: " << ByteOffset << dendl;
+    return STATUS_INVALID_PARAMETER;
+  }
+  if (ByteOffset > CEPH_DOKAN_MAX_FILE_SZ ||
+      Length > CEPH_DOKAN_MAX_IO_SZ) {
+    dout(2) << "Lock size exceeds max file length: "
+            << get_path(FileName)
+            << ". ByteOffset: " << ByteOffset
+            << ". Lock length: " << Length << dendl;
+    return STATUS_FILE_TOO_LARGE;
+  }
+
+  string path = get_path(FileName);
+  HANDLE hFile = CreateFile(
+    file_path.c_str(),
+    GENERIC_READ | GENERIC_WRITE,
+    0,
+    NULL,
+    OPEN_EXISTING,
+    0,
+    NULL);
+  
+  if (hFile == INVALID_HANDLE_VALUE) {
+    return STATUS_OPEN_FAILED;
+  }
+
+  BOOL ret = LockFile(
+    hFile,
+    ByteOffset & 0xffffffff,  // LOW part of 64 bit offset
+    ByteOffset >> 32,         // HIGH part of 64 bit offset
+    Length & 0xffffffff,      // LOW part of the 64 lock length
+    Length >> 32,             // HIGH part of the 64 lock length
+  );
+
+  if (!ret) {
+    dout(2) << __func__ << " " << path
+            << ": LockFile failed. Error: " << ret
+            << ". ByteOffset: " << ByteOffset
+            << ". Lock length: " << Length << dendl;
+    CloseHandle(hFile);
+    return cephfs_errno_to_ntstatus_map(ret);
+  }
+  CloseHandle(hFile);
+  return 0;
+}
+
+static NTSTATUS WinCephUnlockFile(
+  LPCWSTR FileName,
+  LONGLONG ByteOffset,
+  LONGLONG Length,
+  PDOKAN_FILE_INFO DokanFileInfo) {
+
+  if (!Length) {
+    return 0;
+  }
+  if (ByteOffset < 0) {
+    dout(2) << __func__ << " " << get_path(FileName)
+            << ": Invalid offset: " << ByteOffset << dendl;
+    return STATUS_INVALID_PARAMETER;
+  }
+  if (ByteOffset > CEPH_DOKAN_MAX_FILE_SZ ||
+      Length > CEPH_DOKAN_MAX_IO_SZ) {
+    dout(2) << "Unlock size exceeds max file length: "
+            << get_path(FileName)
+            << ". ByteOffset: " << ByteOffset
+            << ". Unlock length: " << Length << dendl;
+    return STATUS_FILE_TOO_LARGE;
+  }
+
+  string path = get_path(FileName);
+  HANDLE hFile = CreateFile(
+    file_path.c_str(),
+    GENERIC_READ | GENERIC_WRITE,
+    0,
+    NULL,
+    OPEN_EXISTING,
+    0,
+    NULL);
+  
+  if (hFile == INVALID_HANDLE_VALUE) {
+    return STATUS_OPEN_FAILED;
+  }
+  
+  BOOL ret = UnlockFile(
+    hFile,
+    ByteOffset & 0xffffffff,  // LOW part of 64 bit offset
+    ByteOffset >> 32,         // HIGH part of 64 bit offset
+    Length & 0xffffffff,      // LOW part of the 64 lock length
+    Length >> 32,             // HIGH part of the 64 lock length
+  );
+
+  if (!ret) {
+    dout(2) << __func__ << " " << path
+            << ": UnlockFile failed. Error: " << ret
+            << ". ByteOffset: " << ByteOffset
+            << ". Unlock length: " << Length << dendl;
+    CloseHandle(hFile);
+    return cephfs_errno_to_ntstatus_map(ret);
+  }
+  CloseHandle(hFile);
+  return 0;
+}
+
 BOOL WINAPI ConsoleHandler(DWORD dwType)
 {
   switch(dwType) {
@@ -926,6 +1039,8 @@ int do_map() {
   dokan_operations->GetDiskFreeSpace = WinCephGetDiskFreeSpace;
   dokan_operations->GetVolumeInformation = WinCephGetVolumeInformation;
   dokan_operations->Unmounted = WinCephUnmount;
+  dokan_operations->LockFile = WinCephLockFile;
+  dokan_operations->UnlockFile = WinCephUnlockFile;
 
   ceph_create_with_context(&cmount, g_ceph_context);
 
