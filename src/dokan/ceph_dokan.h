@@ -25,6 +25,7 @@ struct Config {
   bool current_session_only = false;
   bool debug = false;
   bool dokan_stderr = false;
+  bool enable_cephfs_locks = false;
 
   int operation_timeout = CEPH_DOKAN_IO_DEFAULT_TIMEOUT;
 
