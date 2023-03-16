@@ -34,6 +34,7 @@ Map options:
 
   --debug                     enable debug output
   --dokan-stderr              enable stderr Dokan logging
+  --enable-cephfs-locks       enable cephfs file locks
 
   --read-only                 read-only mount
   -o [ --win-mount-mgr]       use the Windows mount manager
@@ -116,6 +117,8 @@ int parse_args(
       cfg->removable = true;
     } else if (ceph_argparse_flag(args, i, "--win-mount-mgr", "-o", (char *)NULL)) {
       cfg->use_win_mount_mgr = true;
+    } else if (ceph_argparse_flag(args, i, "--enable-cephfs-locks", (char *)NULL)) {
+      cfg->enable_cephfs_locks = true;
     } else if (ceph_argparse_witharg(args, i, &win_vol_name,
                                      "--win-vol-name", (char *)NULL)) {
       cfg->win_vol_name = to_wstring(win_vol_name);
@@ -242,6 +245,8 @@ int set_dokan_options(Config *cfg, PDOKAN_OPTIONS dokan_options) {
     dokan_options->Options |= DOKAN_OPTION_DEBUG;
   if (cfg->dokan_stderr)
     dokan_options->Options |= DOKAN_OPTION_STDERR;
+  if (cfg->enable_cephfs_locks)
+    dokan_options->Options |= DOKAN_OPTION_FILELOCK_USER_MODE;
 
   return 0;
 }

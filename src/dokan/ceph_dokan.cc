@@ -852,6 +852,122 @@ static NTSTATUS WinCephUnmount(
   return 0;
 }
 
+static NTSTATUS WinCephLockFile(
+  LPCWSTR FileName,
+  LONGLONG ByteOffset,
+  LONGLONG Length,
+  PDOKAN_FILE_INFO DokanFileInfo) {
+  if (!Length) {
+    return 0;
+  }
+
+  std::string path = get_path(FileName);
+
+  if (ByteOffset < 0) {
+    dout(2) << __func__ << " " << path
+            << ": Invalid offset: " << ByteOffset << dendl;
+    return STATUS_INVALID_PARAMETER;
+  }
+  if (ByteOffset > CEPH_DOKAN_MAX_FILE_SZ ||
+      Length > CEPH_DOKAN_MAX_IO_SZ) {
+    dout(2) << "Lock size exceeds max file length: " << path
+            << ". ByteOffset: " << ByteOffset
+            << ". Lock length: " << Length << dendl;
+    return STATUS_FILE_TOO_LARGE;
+  }
+
+  pfd_context fdc = (pfd_context) &(DokanFileInfo->Context);
+  if (!fdc->fd) {
+    dout(15) << __func__ << " " << get_path(FileName)
+             << ". Missing context, using temporary handle." << dendl;
+
+    string path = get_path(FileName);
+    int fd_new = ceph_open(cmount, path.c_str(), O_RDONLY, 0);
+    if (fd_new < 0) {
+      dout(2) << __func__ << " " << path
+              << ": ceph_open failed. Error: " << fd_new << dendl;
+      return cephfs_errno_to_ntstatus_map(fd_new);
+    }
+
+    int ret = ceph_flock(cmount, fd_new, LOCK_EX | LOCK_NB, pthread_self());
+    if (ret < 0) {
+      dout(2) << __func__ << " " << path
+              << ": ceph_flock lock failed. Error: " << ret
+              << ". Path: " << path << dendl;
+      ceph_close(cmount, fd_new);
+      return cephfs_errno_to_ntstatus_map(ret);
+    }
+    ceph_close(cmount, fd_new);
+    return 0;
+  } else {
+    int ret = ceph_flock(cmount, fdc->fd, LOCK_EX | LOCK_NB, pthread_self());
+    if (ret < 0) {
+      dout(2) << __func__ << " " << path
+              << ": ceph_flock lock failed. Error: " << ret
+              << ". Path: " << path << dendl;
+      return cephfs_errno_to_ntstatus_map(ret);
+    }
+    return 0;
+  }
+}
+
+static NTSTATUS WinCephUnlockFile(
+  LPCWSTR FileName,
+  LONGLONG ByteOffset,
+  LONGLONG Length,
+  PDOKAN_FILE_INFO DokanFileInfo) {
+
+  std::string path = get_path(FileName);
+
+  if (ByteOffset < 0) {
+    dout(2) << __func__ << " " << path
+            << ": Invalid offset: " << ByteOffset << dendl;
+    return STATUS_INVALID_PARAMETER;
+  }
+  if (ByteOffset > CEPH_DOKAN_MAX_FILE_SZ ||
+      Length > CEPH_DOKAN_MAX_IO_SZ) {
+    dout(2) << "Lock size exceeds max file length: " << path
+            << ". ByteOffset: " << ByteOffset
+            << ". Lock length: " << Length << dendl;
+    return STATUS_FILE_TOO_LARGE;
+  }
+
+  pfd_context fdc = (pfd_context) &(DokanFileInfo->Context);
+  if (!fdc->fd) {
+    dout(15) << __func__ << " " << get_path(FileName)
+             << ". Missing context, using temporary handle." << dendl;
+
+    string path = get_path(FileName);
+    int fd_new = ceph_open(cmount, path.c_str(), O_RDONLY, 0);
+    if (fd_new < 0) {
+      dout(2) << __func__ << " " << path
+              << ": ceph_open failed. Error: " << fd_new << dendl;
+      return cephfs_errno_to_ntstatus_map(fd_new);
+    }
+
+    int ret = ceph_flock(cmount, fd_new, LOCK_UN, pthread_self());
+    if (ret < 0) {
+      dout(2) << __func__ << " " << path
+              << ": ceph_flock unlock failed. Error: " << ret
+              << ". Path: " << path << dendl;
+      ceph_close(cmount, fd_new);
+      return cephfs_errno_to_ntstatus_map(ret);
+    }
+    ceph_close(cmount, fd_new);
+    return 0;
+  } else {
+    int ret = ceph_flock(cmount, fdc->fd, LOCK_UN, pthread_self());
+
+    if (ret < 0) {
+      dout(2) << __func__ << " " << path
+              << ": ceph_flock unlock failed. Error: " << ret
+              << ". Path: " << path << dendl;
+      return cephfs_errno_to_ntstatus_map(ret);
+    }
+    return 0;
+  }
+}
+
 BOOL WINAPI ConsoleHandler(DWORD dwType)
 {
   switch(dwType) {
@@ -931,6 +1047,8 @@ int do_map() {
   dokan_operations->GetDiskFreeSpace = WinCephGetDiskFreeSpace;
   dokan_operations->GetVolumeInformation = WinCephGetVolumeInformation;
   dokan_operations->Unmounted = WinCephUnmount;
+  dokan_operations->LockFile = WinCephLockFile;
+  dokan_operations->UnlockFile = WinCephUnlockFile;
 
   ceph_create_with_context(&cmount, g_ceph_context);
 
